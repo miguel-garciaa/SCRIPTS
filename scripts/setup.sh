@@ -2,7 +2,13 @@
 
 USUARIO="laravel"
 PASSWORD="laravel"
-PROYECTO_DIR="/var/www/mecanico"
+
+if [ -z "$1" ]; then
+    echo "Uso: $0 <nombre_proyecto>"
+    exit 1
+fi
+
+PROYECTO_DIR="/var/www/$1"
 
 if id "$USUARIO" &>/dev/null; then
     echo "El usuario '$USUARIO' ya existe. No se realizarán cambios."
