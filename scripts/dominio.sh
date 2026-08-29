@@ -14,17 +14,68 @@ set -e
 
 DOMAIN_NAME="${1:-}"
 
-PROYECTO=""
-PROYECTO_DIR="${PROYECTO_DIR:-/var/www/$PROYECTO}"
-
-if [ ! -f "$PROYECTO_DIR/artisan" ] && [ -f /var/www/laravel/artisan ]; then
-    PROYECTO_DIR="/var/www/laravel"
-fi
+PROYECTO_DIR="${PROYECTO_DIR:-}"
+PROYECTOS_ROOT="/var/www"
 
 LARAVEL_USER="laravel"
 
 CLOUDFLARE_CERT=""
 CLOUDFLARE_KEY=""
+
+# ==============================================================================
+# DETECTAR PROYECTO LARAVEL
+# ==============================================================================
+
+detectar_proyecto_laravel() {
+    local octane_dir=""
+    local artisan_file
+    local -a proyectos=()
+
+    # setup.sh deja la ruta exacta del proyecto en el servicio de Octane.
+    # Esta es la fuente más fiable si existen varios proyectos en /var/www.
+    if [ -f /etc/systemd/system/octane.service ]; then
+        octane_dir="$(
+            sed -n 's/^[[:space:]]*WorkingDirectory=//p' \
+                /etc/systemd/system/octane.service \
+                | tail -n 1
+        )"
+
+        if [[ "$octane_dir" == "$PROYECTOS_ROOT"/* ]] && \
+           [ -f "$octane_dir/artisan" ]; then
+            printf '%s\n' "$octane_dir"
+            return 0
+        fi
+    fi
+
+    while IFS= read -r -d '' artisan_file; do
+        proyectos+=("${artisan_file%/artisan}")
+    done < <(
+        find "$PROYECTOS_ROOT" \
+            -mindepth 2 \
+            -maxdepth 2 \
+            -type f \
+            -name artisan \
+            -print0 \
+            2>/dev/null
+    )
+
+    if [ "${#proyectos[@]}" -eq 1 ]; then
+        printf '%s\n' "${proyectos[0]}"
+        return 0
+    fi
+
+    if [ "${#proyectos[@]}" -eq 0 ]; then
+        echo "Error: no se encontró ningún proyecto Laravel en $PROYECTOS_ROOT." >&2
+        return 1
+    fi
+
+    echo "Error: se encontraron varios proyectos Laravel en $PROYECTOS_ROOT" >&2
+    echo "y el servicio Octane no permite saber cuál está activo:" >&2
+
+    printf '  %s\n' "${proyectos[@]}" >&2
+
+    return 1
+}
 
 # ==============================================================================
 # COMPROBACIONES INICIALES
@@ -48,6 +99,12 @@ fi
 if ! [[ "$DOMAIN_NAME" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
     echo "Error: el nombre de dominio no es válido: $DOMAIN_NAME"
     exit 1
+fi
+
+if [ -z "$PROYECTO_DIR" ]; then
+    if ! PROYECTO_DIR="$(detectar_proyecto_laravel)"; then
+        exit 1
+    fi
 fi
 
 if [ ! -f "$PROYECTO_DIR/artisan" ]; then
