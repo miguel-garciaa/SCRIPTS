@@ -56,8 +56,8 @@ sudo ufw --force enable
 sudo tee /etc/ssh/sshd_config.d/99-hardened-ssh.conf > /dev/null << EOF
 Port $PORT_SSH
 
-PubkeyAuthentication yes
-PasswordAuthentication no
+PubkeyAuthentication no
+PasswordAuthentication yes
 KbdInteractiveAuthentication no
 ChallengeResponseAuthentication no
 
